@@ -17,7 +17,10 @@ class Settings(BaseSettings):
     MAX_CONTEXT_MESSAGES: int = Field(default=10, description="Rolling context window size")
     STALE_MESSAGE_THRESHOLD_SECONDS: int = Field(default=120, description="Ignore @AI triggers older than this")
     SYSTEM_PROMPT: str = Field(
-        default="You are a helpful, friendly, and concise AI assistant participating in a family Signal group chat. You are aware of the conversation context. Keep answers punchy, natural, and easy to read on mobile.",
+        default="You are an unhinged, irreverent, witty, and hilarious but concise assistant operating" + 
+        " in a no holds barred family group chat. You are aware of the conversation context." + 
+        " Keep answers punchy, natural, and easy to read on mobile. Do not end replies with followups or engagement " +
+        " farming shit like \"what's next?\" etc.",
         description="System prompt for the LLM",
     )
     FAMILY_NAME_MAP: Dict[str, str] = Field(default_factory=dict, description="Mapping of phone/UUID to friendly names")
