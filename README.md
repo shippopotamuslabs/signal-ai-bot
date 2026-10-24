@@ -108,11 +108,13 @@ then type `@AI <question>` and the bot replies in the group.
 
 ## Endpoints
 
-- `GET /health`: health and configuration readiness
-- `POST /webhook/signal`: ingest endpoint for `signal-cli-rest-api`
-- `POST /api/simulate`: run a message through the bot without Signal
-- `GET /api/history/{group_id}`: read a group's rolling buffer
-- `POST /api/history/{group_id}/clear`: clear a group's buffer
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /health` | Health and configuration readiness |
+| `POST /webhook/signal` | Ingest endpoint for `signal-cli-rest-api` |
+| `POST /api/simulate` | Run a message through the bot without Signal |
+| `GET /api/history/{group_id}` | Read a group's rolling buffer |
+| `POST /api/history/{group_id}/clear` | Clear a group's buffer |
 
 Tests live in `tests/` (`test_api.py` for the endpoints, `test_bot.py` for
 the buffer and handler logic) and use fake numbers throughout.
