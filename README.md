@@ -1,143 +1,118 @@
-# 🤖 Signal AI Group Bot
+# Signal AI Group Bot
 
-A self-hosted, lightweight AI assistant for Signal group chats and direct messages. It listens to conversations, remembers the last 10 messages of group context, and responds whenever someone starts a message with `@AI`.
+A self-hosted AI assistant for Signal group chats and direct messages. It
+keeps the last 10 messages of context per group and answers when someone
+starts a message with `@AI`.
 
-Powered by **`signal-cli-rest-api`**, **FastAPI**, and **OpenRouter** (supports Claude 3.5 Sonnet, GPT-4o, Gemini 2.5, DeepSeek, etc.).
+It runs on `signal-cli-rest-api` for the Signal side, a FastAPI server for
+the bot logic, and OpenRouter for the model (Claude, GPT, Gemini, DeepSeek,
+and the rest of the OpenRouter catalog).
 
----
+## What it does
 
-## 🌟 Key Features
+- Keeps a rolling window of recent group messages, so the model sees who
+  said what before it answers.
+- Answers only when the trigger prefix (default `@AI`) starts a message.
+- Drops stale triggers: a question sent while the host was offline gets
+  recorded as context and gets no reply when the bot reconnects.
+- Maps raw Signal UUIDs and numbers to friendly names (`Mom`, `Dad`) in the
+  context it sends the model.
+- Stores Signal keys locally on disk in `./signal-data`. The encryption stays
+  on your machine.
+- Ships a local simulator, so the prompt handling and context buffer can be
+  tested before a number is registered.
 
-- **Context-Aware**: Retains a rolling window of recent group chat messages so the AI understands who said what.
-- **Trigger-Based**: Only generates responses when `@AI` (or your configured trigger) is at the start of a message.
-- **Staleness Protection**: Ignores old questions sent while your computer was closed or offline (preventing spam upon reconnection).
-- **Friendly Name Mapping**: Maps raw Signal UUIDs / numbers into friendly names (e.g. `Mom`, `Dad`, `Alex`) for natural AI context.
-- **E2EE Privacy**: Cryptographic keys are saved locally on your disk in `./signal-data`.
-- **Local Simulation**: Includes a built-in interactive simulator and `/api/simulate` endpoint to test before your eSIM arrives.
-
----
-
-## 📁 Architecture Overview
+## Architecture
 
 ```
-[ Signal Group Members ]
-          │
-          ▼ (E2EE Signal Protocol)
-┌──────────────────────────────────────────────┐
-│ Docker Compose                               │
-│                                              │
-│  ┌────────────────────────────────────────┐  │
-│  │ signal-cli-api (Port 8080)             │  │
-│  │ - Maintains persistent Signal session  │  │
-│  │ - Decrypts & forwards via Webhook      │  │
-│  └───────────────────┬────────────────────┘  │
-│                      │ HTTP POST Webhook     │
-│                      ▼                       │
-│  ┌────────────────────────────────────────┐  │
-│  │ signal-ai-bot (FastAPI / Port 8000)    │  │
-│  │ - Ingestion & Staleness check          │  │
-│  │ - Rolling group buffer (last 10 msgs)  │  │
-│  │ - OpenRouter API (LLM generation)      │  │
-│  │ - Dispatches reply to Signal group     │  │
-│  └────────────────────────────────────────┘  │
-└──────────────────────────────────────────────┘
+Signal group members
+        |
+        v  (Signal protocol, end-to-end encrypted)
+signal-cli-api (Docker, port 8080)
+  holds the Signal session, decrypts, forwards by webhook
+        |
+        v  HTTP POST /webhook/signal
+signal-ai-bot (FastAPI, port 8000)
+  staleness check, rolling group buffer, OpenRouter call, reply dispatch
 ```
 
----
+Both services run from `docker-compose.yml`: `signal-cli` and `bot-server`.
 
-## 🚀 Quickstart
+## Quickstart
 
-### 1. Configure Environment
+### 1. Configure
 
-Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and set:
-- `OPENROUTER_API_KEY`: Your OpenRouter API key (get one at [openrouter.ai/keys](https://openrouter.ai/keys))
-- `SIGNAL_PHONE_NUMBER`: The phone number you will register (e.g., `+15551234567`)
-- `OPENROUTER_MODEL`: Desired model (default: `anthropic/claude-3.5-sonnet`)
+Set in `.env`:
 
----
+- `OPENROUTER_API_KEY`: your OpenRouter API key (openrouter.ai/keys)
+- `SIGNAL_PHONE_NUMBER`: the number the bot will register, e.g. `+15551234567`
+- `OPENROUTER_MODEL`: model slug, default `anthropic/claude-3.5-sonnet`
 
-### 2. Testing Without eSIM or Signal (Local Simulation)
+### 2. Test without a number (simulation)
 
-You can test the bot's prompt handling, context buffer, and OpenRouter integration immediately:
+Interactive CLI simulator:
 
-**Option A: Interactive CLI Simulator**
 ```bash
 python3 scripts/simulate_chat.py
 ```
-Type messages to build context, and start a message with `@AI` to see the bot answer!
 
-**Option B: REST API Simulation**
+Type messages to build context, then start one with `@AI`.
+
+Or over REST:
+
 ```bash
-# Start the bot server
 docker compose up bot-server -d
 
-# Send a simulated message
 curl -X POST http://localhost:8000/api/simulate \
   -H "Content-Type: application/json" \
-  -d '{
-    "group_id": "family-test",
-    "sender_name": "Mom",
-    "message": "@AI what should we make for dinner with chicken and rice?"
-  }'
+  -d '{"group_id": "family-test", "sender_name": "Mom",
+       "message": "@AI what should we make for dinner with chicken and rice?"}'
 ```
 
----
+### 3. Register the number
 
-### 3. Registering Your Phone Number (When eSIM arrives)
+```bash
+docker compose up -d signal-cli
+python3 scripts/register_number.py
+```
 
-1. **Start the Signal API daemon:**
-   ```bash
-   docker compose up -d signal-cli
-   ```
+The wizard asks for the number, then for the 6-digit SMS code that arrives on
+the phone holding the SIM or eSIM. Then start the whole stack:
 
-2. **Run the interactive registration wizard:**
-   ```bash
-   python3 scripts/register_number.py
-   ```
-   - Enter your phone number (e.g. `+12345678900`).
-   - You will receive a 6-digit SMS code on the phone where the eSIM is installed.
-   - Enter the code in the terminal.
+```bash
+docker compose up -d
+```
 
-3. **Start the full bot:**
-   ```bash
-   docker compose up -d
-   ```
+### 4. Add the bot to a group
 
----
+Add the bot's number as a member of the Signal group. Anyone in the group can
+then type `@AI <question>` and the bot replies in the group.
 
-### 4. Adding Bot to Your Family Signal Group
+## Configuration
 
-1. In the Signal app on your phone, open your Family Group.
-2. Tap the group name > **Add Members** > Select or enter your bot's phone number.
-3. Once added, anyone in the group can type:
-   > `@AI what's a good movie to watch tonight?`
-4. The bot will reply directly into the group!
-
----
-
-## ⚙️ Configuration Reference
-
-| Variable | Default | Description |
+| Variable | Default | What it does |
 | :--- | :--- | :--- |
-| `OPENROUTER_API_KEY` | `""` | OpenRouter API Key |
+| `OPENROUTER_API_KEY` | (empty) | OpenRouter API key |
 | `OPENROUTER_MODEL` | `anthropic/claude-3.5-sonnet` | Model slug to query |
-| `SIGNAL_PHONE_NUMBER` | `""` | Registered phone number (`+1...`) |
-| `SIGNAL_API_URL` | `http://signal-cli:8080` | URL of `signal-cli-rest-api` |
-| `TRIGGER_PREFIX` | `@AI` | Word required at start of message |
-| `MAX_CONTEXT_MESSAGES` | `10` | Number of recent messages retained per group |
-| `STALE_MESSAGE_THRESHOLD_SECONDS` | `120` | Max age in seconds for @AI triggers |
-| `FAMILY_NAME_MAP` | `{}` | JSON map of phone numbers / UUIDs to friendly names |
+| `SIGNAL_PHONE_NUMBER` | (empty) | Registered Signal number, `+1...` format |
+| `SIGNAL_API_URL` | `http://localhost:8080` in code; compose sets `http://signal-cli:8080` | Base URL of `signal-cli-rest-api` |
+| `TRIGGER_PREFIX` | `@AI` | A message must start with this to get an answer |
+| `MAX_CONTEXT_MESSAGES` | `10` | Messages kept per group |
+| `STALE_MESSAGE_THRESHOLD_SECONDS` | `120` | Triggers older than this are recorded and not answered |
+| `FAMILY_NAME_MAP` | `{}` | JSON map of phone numbers and UUIDs to friendly names |
+| `SYSTEM_PROMPT` | see `config.py` | The persona prompt sent with each call |
 
----
+## Endpoints
 
-## 🛠️ Management & API Endpoints
+- `GET /health`: health and configuration readiness
+- `POST /webhook/signal`: ingest endpoint for `signal-cli-rest-api`
+- `POST /api/simulate`: run a message through the bot without Signal
+- `GET /api/history/{group_id}`: read a group's rolling buffer
+- `POST /api/history/{group_id}/clear`: clear a group's buffer
 
-- `GET /health`: Health status & configuration readiness check.
-- `GET /api/history/{group_id}`: View recent rolling chat memory for a group.
-- `POST /api/history/{group_id}/clear`: Clear the memory buffer for a group.
-- `POST /webhook/signal`: Ingest webhook endpoint for `signal-cli-rest-api`.
+Tests live in `tests/` (`test_api.py` for the endpoints, `test_bot.py` for
+the buffer and handler logic) and use fake numbers throughout.
