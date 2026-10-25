@@ -118,3 +118,7 @@ then type `@AI <question>` and the bot replies in the group.
 
 Tests live in `tests/` (`test_api.py` for the endpoints, `test_bot.py` for
 the buffer and handler logic) and use fake numbers throughout.
+
+## License
+
+0BSD license. Do whatever you want with the code. Just don't expect it to work or sue me.
